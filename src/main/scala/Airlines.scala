@@ -1,5 +1,5 @@
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Column, DataFrame, SQLContext}
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -62,6 +62,49 @@ object Airlines {
     outputDf
   }
 
+  /**
+    * Task A
+    * Get number of partitions for 1-hour DataFrame
+    */
+  def taskA(airlines: DataFrame) = {
+    println(s"Count of partitions${airlines.rdd.getNumPartitions}")
+  }
+
+  /**
+    * Task B
+    * Calculate average latitude and minimum longitude for each origin _country
+    */
+  def taskB(airlines: DataFrame)= {
+    println(airlines.groupBy("origin_country")
+          .agg(round(avg("latitude"), 3).alias("Average latitude"),
+               round(mean("longitude"), 3).alias("Average longitude"))
+          .show())
+  }
+
+  /**
+    * Task C
+    * Get the max speed ever seen for the last 4 hours
+    */
+  def taskC(airlines: DataFrame)= {
+    println(airlines
+          .filter("velocity > 200")
+          .agg(max("velocity"))
+          .head())
+  }
+
+  /**
+    * Task D
+    * Get top 10 airplanes with max average speed for the last 4 hours (round the result)
+    */
+  def taskD(airlines: DataFrame)= {
+    println(airlines
+            .filter("velocity is not null")
+            .groupBy("icao24")
+            .agg(round(mean("velocity")).alias("velocity"))
+            .orderBy(desc_nulls_last("velocity"))
+            .show())
+  }
+
 
   def main(args: Array[String]): Unit = {
     Logger.getLogger("org").setLevel(Level.ERROR)
@@ -71,6 +114,16 @@ object Airlines {
 
     val folders = List.tabulate(4)(i => s"D:\\Training\\Opensky\\data\\data_0${i}h__20_04_2019")
 
+    val hoursAirlinesDF = sqlContext.read
+      .format("csv")
+      .option("header", "true")
+      .csv(folders: _*)
+    println(hoursAirlinesDF.show())
+    println(s"Count of airlines: ${hoursAirlinesDF.count()}")
+
+    val smpHoursAirlinesDF = hoursAirlinesDF.sample(withReplacement = true,0.1, seed = 1)
+
+    /** Joined DataFrames
     var aircraftDF = readDF("D:\\Python\\Work projects\\parsing_linkedin\\collect_data\\aircraftDatabase.csv",
       "csv", sqlContext)
     val aircraftTypesDF = readDF("D:\\Python\\Work projects\\parsing_linkedin\\collect_data\\aircraftTypes.csv",
@@ -82,15 +135,6 @@ object Airlines {
     println(aircraftTypesDF.show())
     println(s"Count of aircraft DB: ${aircraftDF.count()}")
 
-    val hoursAirlinesDF = sqlContext.read
-      .format("csv")
-      .option("header", "true")
-      .csv(folders: _*)
-    println(hoursAirlinesDF.show())
-    println(s"Count of airlines: ${hoursAirlinesDF.count()}")
-
-    val smpHoursAirlinesDF = hoursAirlinesDF.sample(withReplacement = true,0.1, seed = 1)
-
     val joinDF = joinDFs(smpHoursAirlinesDF, aircraftDF, aircraftTypesDF)
 
     joinDF.write.format("csv").mode("overwrite").option("sep", "\t")
@@ -98,5 +142,6 @@ object Airlines {
 
     joinDF.write.format("parquet").mode("overwrite")
       .save("/tmp/output_files.parquet")
+      **/
   }
 }

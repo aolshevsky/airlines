@@ -67,6 +67,7 @@ object Airlines {
     * Get number of partitions for 1-hour DataFrame
     */
   def taskA(airlines: DataFrame) = {
+    println("Result of task A:")
     println(s"Count of partitions${airlines.rdd.getNumPartitions}")
   }
 
@@ -75,10 +76,12 @@ object Airlines {
     * Calculate average latitude and minimum longitude for each origin _country
     */
   def taskB(airlines: DataFrame)= {
-    println(airlines.groupBy("origin_country")
-          .agg(round(avg("latitude"), 3).alias("Average latitude"),
-               round(mean("longitude"), 3).alias("Average longitude"))
-          .show())
+    println("Result of task B:")
+    println(airlines
+      .groupBy("origin_country")
+      .agg(round(avg("latitude"), 3).alias("Average latitude"),
+           round(mean("longitude"), 3).alias("Average longitude"))
+      .show())
   }
 
   /**
@@ -86,6 +89,7 @@ object Airlines {
     * Get the max speed ever seen for the last 4 hours
     */
   def taskC(airlines: DataFrame)= {
+    println("Result of task C:")
     println(airlines
           .filter("velocity > 200")
           .agg(max("velocity"))
@@ -97,13 +101,83 @@ object Airlines {
     * Get top 10 airplanes with max average speed for the last 4 hours (round the result)
     */
   def taskD(airlines: DataFrame)= {
+    println("Result of task D:")
     println(airlines
-            .filter("velocity is not null")
-            .groupBy("icao24")
-            .agg(round(mean("velocity")).alias("velocity"))
-            .orderBy(desc_nulls_last("velocity"))
-            .show())
+      .filter("velocity is not null")
+      .groupBy("icao24")
+      .agg(round(mean("velocity")).alias("velocity"))
+      .orderBy(desc_nulls_last("velocity"))
+      .show())
   }
+
+  /**
+    * Task E
+    * Show distinct airplanes where origin_country = ‘Germany’ and it was on ground
+    * at least one time during last 4 hours.
+    */
+  def taskE(airlines: DataFrame)= {
+    println("Result of task E:")
+    val df = airlines
+      .filter("origin_country = 'Germany'")
+      .groupBy("icao24")
+      .agg(min("on_ground").alias("on_ground"))
+      .filter("on_ground = True")
+
+    println(s"Count: ${df.count()}")
+    println(df.show())
+  }
+
+  /**
+    * Task F
+    * Show top 10 origin_country with the highest number of
+    * unique airplanes in air for the last day
+    */
+  def taskF(airlines: DataFrame)= {
+    println("Result of task F:")
+    val dfOnAir = airlines.filter("on_ground = False")
+    val df = dfOnAir.select("icao24", "origin_country").distinct().groupBy("origin_country").count().sort(desc("count"))
+    println(df.show())
+  }
+
+
+  /**
+    * Task G
+    * Show top 10 longest (by time) completed flights for the last day
+    */
+  def taskG(airlines: DataFrame) = {
+    println("Result of task G:")
+    val task_f = airlines
+      .groupBy("icao24")
+      .agg(min("on_ground")
+        .alias("on_ground_min"),
+        max("on_ground")
+          .alias("on_ground_max"))
+      .filter("on_ground_min = False")
+      .filter("on_ground_max = True")
+      .first()
+
+    val task_f_2 = airlines.filter(col("icao24").equalTo(task_f(0))).orderBy(desc("time_position"))
+    println(s"Count of rows with ${task_f(0)}: ${task_f_2.count()}")
+    println(task_f_2.show(100))
+    val end_date = task_f_2.first()(14)
+    val start_date = task_f_2.where(col("on_ground") === "True").first()(14)
+    println(start_date)
+    println(s"Flight time: ${end_date.toString.toFloat - start_date.toString.toFloat}")
+  }
+
+
+  /**
+    * Task H
+    * Get the average geo_altitude value for each origin_country
+    * (round the result to 3 decimal places and rename column)
+    */
+  def taskH(airlines: DataFrame)= {
+    println(airlines
+      .groupBy("origin_country")
+      .agg(round(avg("geo_altitude"), 3).alias("Average altitude"))
+      .show())
+  }
+
 
 
   def main(args: Array[String]): Unit = {
@@ -122,6 +196,9 @@ object Airlines {
     println(s"Count of airlines: ${hoursAirlinesDF.count()}")
 
     val smpHoursAirlinesDF = hoursAirlinesDF.sample(withReplacement = true,0.1, seed = 1)
+
+    taskF(smpHoursAirlinesDF)
+    taskG(smpHoursAirlinesDF)
 
     /** Joined DataFrames
     var aircraftDF = readDF("D:\\Python\\Work projects\\parsing_linkedin\\collect_data\\aircraftDatabase.csv",

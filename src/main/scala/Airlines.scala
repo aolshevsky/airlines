@@ -28,6 +28,41 @@ object Airlines {
     f_df
   }
 
+  def joinDFsBroadcast(airlines:DataFrame, aircraft:DataFrame, aircraftType: DataFrame, sc: SparkContext) : DataFrame = {
+    val dfAsAirlines = airlines.as("airlines")
+    val dfAsAircraft = aircraft.as("aircraft")
+    val dfAsAircraftType = aircraftType.as("aircraftType")
+
+    val joinType = "left_semi"
+
+    val joinedAircraftType = dfAsAircraft.join(dfAsAircraftType,
+      col("aircraft.typecode") === col("aircraftType.Designator"),
+      joinType)
+
+    val dfAsJoinedAircraft = joinedAircraftType.as("joinedAircraft")
+    println("Joined aircrafts with aircraft types")
+    println(joinedAircraftType.show())
+    val broadcastJoinedAircraft = sc.broadcast(joinedAircraftType)
+
+    println(s"Count of partitions in dfAsJoinedAircraft: ${dfAsJoinedAircraft.rdd.getNumPartitions}")
+    println(s"Count of partitions in dfAsAirlines: ${dfAsAirlines.rdd.getNumPartitions}")
+
+    val joinedAirlinesAircraft = dfAsAirlines.join(dfAsJoinedAircraft,
+      broadcastJoinedAircraft.value("icao24") === col("airlines.icao24"),
+      "left_outer")
+      .drop(col("joinedAircraft.icao24"))
+
+    println(joinedAirlinesAircraft.explain())
+    println("Joined stream airplanes with joined aircraft with aircraft types")
+    //println(joinedAirlinesAircraft.orderBy("time_position").show())
+
+    println(s"Count of partitions in joined df: ${joinedAirlinesAircraft.rdd.getNumPartitions}")
+    val outputDf = joinedAirlinesAircraft.coalesce(5)
+    println(s"Count of partitions after coalesce: ${outputDf.rdd.getNumPartitions}")
+
+    outputDf
+  }
+
   def joinDFs(airlines:DataFrame, aircraft:DataFrame, aircraftType: DataFrame) : DataFrame = {
     val dfAsAirlines = airlines.as("airlines")
     val dfAsAircraft = aircraft.as("aircraft")
@@ -43,8 +78,8 @@ object Airlines {
     println("Joined aircrafts with aircraft types")
     println(joinedAircraftType.show())
 
-    println(s"Count of partitions in df_asJoinedAircrafts: ${dfAsJoinedAircraft.rdd.getNumPartitions}")
-    println(s"Count of partitions in df_asHoursAirlines: ${dfAsJoinedAircraft.rdd.getNumPartitions}")
+    println(s"Count of partitions in dfAsJoinedAircraft: ${dfAsJoinedAircraft.rdd.getNumPartitions}")
+    println(s"Count of partitions in dfAsAirlines: ${dfAsAirlines.rdd.getNumPartitions}")
 
     val joinedAirlinesAircraft = dfAsAirlines.join(dfAsJoinedAircraft,
       col("joinedAircraft.icao24") === col("airlines.icao24"),
@@ -53,7 +88,7 @@ object Airlines {
 
     println(joinedAirlinesAircraft.explain())
     println("Joined stream airplanes with joined aircraft with aircraft types")
-    println(joinedAirlinesAircraft.orderBy("time_position").show())
+    //println(joinedAirlinesAircraft.orderBy("time_position").show())
 
     println(s"Count of partitions in joined df: ${joinedAirlinesAircraft.rdd.getNumPartitions}")
     val outputDf = joinedAirlinesAircraft.coalesce(5)
@@ -139,7 +174,6 @@ object Airlines {
     println(df.show())
   }
 
-
   /**
     * Task G
     * Show top 10 longest (by time) completed flights for the last day
@@ -165,7 +199,6 @@ object Airlines {
     println(s"Flight time: ${end_date.toString.toFloat - start_date.toString.toFloat}")
   }
 
-
   /**
     * Task H
     * Get the average geo_altitude value for each origin_country
@@ -177,7 +210,6 @@ object Airlines {
       .agg(round(avg("geo_altitude"), 3).alias("Average altitude"))
       .show())
   }
-
 
 
   def main(args: Array[String]): Unit = {
@@ -197,10 +229,11 @@ object Airlines {
 
     val smpHoursAirlinesDF = hoursAirlinesDF.sample(withReplacement = true,0.1, seed = 1)
 
-    taskF(smpHoursAirlinesDF)
-    taskG(smpHoursAirlinesDF)
+//    taskF(smpHoursAirlinesDF)
+//    taskG(smpHoursAirlinesDF)
 
-    /** Joined DataFrames
+    /** Joining DataFrames **/
+
     var aircraftDF = readDF("D:\\Python\\Work projects\\parsing_linkedin\\collect_data\\aircraftDatabase.csv",
       "csv", sqlContext)
     val aircraftTypesDF = readDF("D:\\Python\\Work projects\\parsing_linkedin\\collect_data\\aircraftTypes.csv",
@@ -214,11 +247,14 @@ object Airlines {
 
     val joinDF = joinDFs(smpHoursAirlinesDF, aircraftDF, aircraftTypesDF)
 
+    joinDFsBroadcast(smpHoursAirlinesDF, aircraftDF, aircraftTypesDF, sc)
+
     joinDF.write.format("csv").mode("overwrite").option("sep", "\t")
       .save("/tmp/output_files.csv")
 
     joinDF.write.format("parquet").mode("overwrite")
       .save("/tmp/output_files.parquet")
-      **/
+
+    scala.io.StdIn.readLine()
   }
 }

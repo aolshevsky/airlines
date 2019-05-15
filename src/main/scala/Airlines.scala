@@ -91,6 +91,12 @@ object Airlines {
 
     val smpHoursAirlinesDF = hoursAirlinesDF.sample(withReplacement = true,0.1, seed = 1)
 
-    joinDFs(smpHoursAirlinesDF, aircraftDF, aircraftTypesDF)
+    val joinDF = joinDFs(smpHoursAirlinesDF, aircraftDF, aircraftTypesDF)
+
+    joinDF.write.format("csv").mode("overwrite").option("sep", "\t")
+      .save("/tmp/output_files.csv")
+
+    joinDF.write.format("parquet").mode("overwrite")
+      .save("/tmp/output_files.parquet")
   }
 }

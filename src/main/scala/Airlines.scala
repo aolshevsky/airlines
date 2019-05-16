@@ -47,7 +47,7 @@ object Airlines {
     println(s"Count of partitions in dfAsJoinedAircraft: ${dfAsJoinedAircraft.rdd.getNumPartitions}")
     println(s"Count of partitions in dfAsAirlines: ${dfAsAirlines.rdd.getNumPartitions}")
 
-    val joinedAirlinesAircraft = dfAsAirlines.join(dfAsJoinedAircraft,
+    val joinedAirlinesAircraft = dfAsAirlines.join(broadcastJoinedAircraft.value,
       broadcastJoinedAircraft.value("icao24") === col("airlines.icao24"),
       "left_outer")
       .drop(col("joinedAircraft.icao24"))

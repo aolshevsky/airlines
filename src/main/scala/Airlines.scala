@@ -33,7 +33,7 @@ object Airlines {
     val dfAsAircraft = aircraft.as("aircraft")
     val dfAsAircraftType = aircraftType.as("aircraftType")
 
-    val joinType = "left_semi"
+    val joinType = "left_outer"
 
     val joinedAircraftType = dfAsAircraft.join(dfAsAircraftType,
       col("aircraft.typecode") === col("aircraftType.Designator"),
@@ -49,12 +49,12 @@ object Airlines {
 
     val joinedAirlinesAircraft = dfAsAirlines.join(broadcastJoinedAircraft.value,
       broadcastJoinedAircraft.value("icao24") === col("airlines.icao24"),
-      "left_outer")
+      joinType)
       .drop(col("joinedAircraft.icao24"))
 
     println(joinedAirlinesAircraft.explain())
     println("Joined stream airplanes with joined aircraft with aircraft types")
-    //println(joinedAirlinesAircraft.orderBy("time_position").show())
+    println(joinedAirlinesAircraft.show())
 
     println(s"Count of partitions in joined df: ${joinedAirlinesAircraft.rdd.getNumPartitions}")
     val outputDf = joinedAirlinesAircraft.coalesce(5)
@@ -68,7 +68,7 @@ object Airlines {
     val dfAsAircraft = aircraft.as("aircraft")
     val dfAsAircraftType = aircraftType.as("aircraftType")
 
-    val joinType = "left_semi"
+    val joinType = "left_outer"
 
     val joinedAircraftType = dfAsAircraft.join(dfAsAircraftType,
       col("aircraft.typecode") === col("aircraftType.Designator"),
@@ -83,12 +83,12 @@ object Airlines {
 
     val joinedAirlinesAircraft = dfAsAirlines.join(dfAsJoinedAircraft,
       col("joinedAircraft.icao24") === col("airlines.icao24"),
-      "left_outer")
+      joinType)
       .drop(col("joinedAircraft.icao24"))
 
     println(joinedAirlinesAircraft.explain())
     println("Joined stream airplanes with joined aircraft with aircraft types")
-    //println(joinedAirlinesAircraft.orderBy("time_position").show())
+    println(joinedAirlinesAircraft.show())
 
     println(s"Count of partitions in joined df: ${joinedAirlinesAircraft.rdd.getNumPartitions}")
     val outputDf = joinedAirlinesAircraft.coalesce(5)

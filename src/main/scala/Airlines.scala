@@ -219,6 +219,23 @@ object Airlines {
   }
 
 
+  def saveToParquet(df: DataFrame) = {
+    val dfWithDate = df
+      .withColumn("date", from_unixtime(col("time_position"), "YYYY-MM-dd"))
+      .withColumn("hour", from_unixtime(col("time_position"), "HH"))
+
+    dfWithDate.withColumn("year", year(col("date")))
+      .withColumn("month", month(col("date")))
+      .withColumn("day", dayofmonth(col("date")))
+      .drop("date")
+      .repartition(col("hour"))
+      .write
+      .option("compression", "gzip")
+      .partitionBy("year", "month", "day", "hour")
+      .mode("append")
+      .parquet("F:\\Python\\Scala\\output\\data")
+  }
+
   def main(args: Array[String]): Unit = {
     Logger.getLogger("org").setLevel(Level.ERROR)
     val conf = new SparkConf().setMaster("local[*]").setAppName("OpenSkyReader")
@@ -235,8 +252,8 @@ object Airlines {
     println(s"Count of airlines: ${hoursAirlinesDF.count()}")
 
     val smpHoursAirlinesDF = hoursAirlinesDF.sample(withReplacement = true,0.1, seed = 1)
-    
 
+    saveToParquet(smpHoursAirlinesDF)
 //    taskF(smpHoursAirlinesDF)
 //    taskG(smpHoursAirlinesDF)
 

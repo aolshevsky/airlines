@@ -1,4 +1,5 @@
 import org.apache.log4j.{Level, Logger}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Column, DataFrame, SQLContext}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -180,23 +181,19 @@ object Airlines {
     */
   def taskG(airlines: DataFrame) = {
     println("Result of task G:")
-    val task_f = airlines
-      .groupBy("icao24")
-      .agg(min("on_ground")
-        .alias("on_ground_min"),
-        max("on_ground")
-          .alias("on_ground_max"))
-      .filter("on_ground_min = False")
-      .filter("on_ground_max = True")
-      .first()
-
-    val task_f_2 = airlines.filter(col("icao24").equalTo(task_f(0))).orderBy(desc("time_position"))
-    println(s"Count of rows with ${task_f(0)}: ${task_f_2.count()}")
-    println(task_f_2.show(100))
-    val end_date = task_f_2.first()(14)
-    val start_date = task_f_2.where(col("on_ground") === "True").first()(14)
-    println(start_date)
-    println(s"Flight time: ${end_date.toString.toFloat - start_date.toString.toFloat}")
+    val w = Window.partitionBy("icao24").orderBy(desc("time_position"))
+    val toMinutesUDF = udf[Option[Double], Double](secondToMinutesUDF)
+    val flightDf = airlines
+      .withColumn("prev__on_ground", lag("on_ground", 1, "False")
+        .over(w))
+      .filter(col("on_ground") =!= col("prev__on_ground"))
+      .groupBy(col("icao24"))
+      .agg((first("time_position") - last("time_position")).alias("flight_time"), first("origin_country").alias("origin_country"))
+      .filter(col("flight_time").isNotNull)
+      .orderBy(desc("flight_time"))
+      .select(col("icao24"), toMinutesUDF(col("flight_time")).as("flight_time, min"), col("origin_country"))
+      .limit(20)
+    println(flightDf.show(20))
   }
 
   /**
@@ -211,6 +208,16 @@ object Airlines {
       .show())
   }
 
+  def roundAvoid(value: Double, places: Int): Double = {
+    val scale = Math.pow(10, places)
+    (value * scale).round / scale
+  }
+
+  def secondToMinutesUDF(sec: Double): Option[Double] = {
+    val sec_val = Option(sec).getOrElse(return None)
+    Some(roundAvoid(sec_val  / 60, 2))
+  }
+
 
   def main(args: Array[String]): Unit = {
     Logger.getLogger("org").setLevel(Level.ERROR)
@@ -218,7 +225,7 @@ object Airlines {
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
-    val folders = List.tabulate(4)(i => s"D:\\Training\\Opensky\\data\\data_0${i}h__20_04_2019")
+    val folders = List.range(20, 23).map(i => s"F:\\Python\\Scala\\data\\data_${i}h__25_04_2019")
 
     val hoursAirlinesDF = sqlContext.read
       .format("csv")
@@ -228,32 +235,33 @@ object Airlines {
     println(s"Count of airlines: ${hoursAirlinesDF.count()}")
 
     val smpHoursAirlinesDF = hoursAirlinesDF.sample(withReplacement = true,0.1, seed = 1)
+    
 
 //    taskF(smpHoursAirlinesDF)
 //    taskG(smpHoursAirlinesDF)
 
     /** Joining DataFrames **/
 
-    var aircraftDF = readDF("D:\\Python\\Work projects\\parsing_linkedin\\collect_data\\aircraftDatabase.csv",
-      "csv", sqlContext)
-    val aircraftTypesDF = readDF("D:\\Python\\Work projects\\parsing_linkedin\\collect_data\\aircraftTypes.csv",
-      "csv", sqlContext)
-
-    aircraftDF = simplifyAircraftDF(aircraftDF)
-
-    println(aircraftDF.show())
-    println(aircraftTypesDF.show())
-    println(s"Count of aircraft DB: ${aircraftDF.count()}")
-
-    val joinDF = joinDFs(smpHoursAirlinesDF, aircraftDF, aircraftTypesDF)
-
-    joinDFsBroadcast(smpHoursAirlinesDF, aircraftDF, aircraftTypesDF, sc)
-
-    joinDF.write.format("csv").mode("overwrite").option("sep", "\t")
-      .save("/tmp/output_files.csv")
-
-    joinDF.write.format("parquet").mode("overwrite")
-      .save("/tmp/output_files.parquet")
+//    var aircraftDF = readDF("D:\\Python\\Work projects\\parsing_linkedin\\collect_data\\aircraftDatabase.csv",
+//      "csv", sqlContext)
+//    val aircraftTypesDF = readDF("D:\\Python\\Work projects\\parsing_linkedin\\collect_data\\aircraftTypes.csv",
+//      "csv", sqlContext)
+//
+//    aircraftDF = simplifyAircraftDF(aircraftDF)
+//
+//    println(aircraftDF.show())
+//    println(aircraftTypesDF.show())
+//    println(s"Count of aircraft DB: ${aircraftDF.count()}")
+//
+//    val joinDF = joinDFs(smpHoursAirlinesDF, aircraftDF, aircraftTypesDF)
+//
+//    joinDFsBroadcast(smpHoursAirlinesDF, aircraftDF, aircraftTypesDF, sc)
+//
+//    joinDF.write.format("csv").mode("overwrite").option("sep", "\t")
+//      .save("/tmp/output_files.csv")
+//
+//    joinDF.write.format("parquet").mode("overwrite")
+//      .save("/tmp/output_files.parquet")
 
     scala.io.StdIn.readLine()
   }
